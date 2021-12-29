@@ -29,6 +29,12 @@ macro "high resolution image Action Tool - C000T4b12h" {
 	highRes();
 }
 
+macro "julia Tool - C000T4b12j" {
+	getCursorLoc(x, y, z, modifiers);
+	toScaled(x, y);
+	julia(x, y);
+}
+
 macro "mandelbrot Action Tool Options" {
 	Dialog.create("Mandelbrot Options");
 	Dialog.addNumber("max. iterations", maxIterations);
@@ -46,6 +52,31 @@ function getLUT(nr) {
 }
 
 function highRes() {
+	title = getTitle();
+	if (indexOf(title, "mandel")>-1) {
+		highResMandel();
+	} else {
+		highResJulia();
+	}
+}
+
+function highResJulia() {
+	oldWidth = iWidth;
+	iWidth = iWidth * HIGH_RES_FACTOR;
+	oldHeight = iHeight;
+	iHeight = iHeight * HIGH_RES_FACTOR;
+	info = getMetadata("Info");
+	parts = split(info, ",");
+	part1 = split(parts[0], "=");
+	part2 = split(parts[1], "=");
+	cx = parseFloat(part1[1]);
+	cy = parseFloat(part2[1]);
+	julia(cx, cy);
+	iWidth = oldWidth;
+	iHeight = oldHeight;
+}
+
+function highResMandel() {
 	oldWidth = iWidth;
 	iWidth = iWidth * HIGH_RES_FACTOR;
 	oldHeight = iHeight;
@@ -123,4 +154,49 @@ function iterations(x0, y0, max) {
 	    iteration++;
 	}
 	return iteration;
+}
+
+function julia(cx, cy) {
+	R = (sqrt(4*sqrt(cx*cx+cy*cy) + 1) + 1) / 2;
+	RR = R*R;
+	rangeStart = -1*R;
+	rangeEnd = R;
+	delta = rangeEnd - rangeStart;
+	ixMax = iWidth-1;
+	iyMax = iHeight-1;	
+	xFactor = delta / ixMax;
+	yFactor = delta / iyMax;
+	print(cx, cy);
+	newImage("julia", "16-bit black", iWidth, iHeight, 1);
+	setMetadata("Info", "cx="+cx+", cy="+cy);
+	setBatchMode("hide");
+	for (x = 0; x < iWidth; x++) {
+		showProgress(x, iWidth-1);
+		x0 = x * xFactor + rangeStart;
+		for (y = 0; y < iHeight; y++) {
+			y0 = y * yFactor + rangeStart;
+			c = juliaIterations(x0, y0, cx, cy, RR);
+			setPixel(x, y, c);
+		}
+	}
+	run(LUT);
+	run("Enhance Contrast", "saturated=0.35");
+	setBatchMode("show");
+}
+
+function juliaIterations(x, y, cx, cy, RR) {
+	zx = x;
+	zy = y;
+	iteration = 0;
+	 while (zx * zx + zy * zy < RR  &&  iteration < maxIterations) 
+    {
+        xtemp = zx * zx - zy * zy;
+        zy = 2 * zx * zy  + cy; 
+        zx = xtemp + cx;   
+        iteration++;
+    }
+    if (iteration == maxIterations)
+        return 0;
+    else
+        return iteration;
 }
