@@ -12,8 +12,12 @@ var xEnd = xMax;
 var yStart = yMin;
 var yEnd = yMax;
 
-var HIGH_RES_FACTOR = 10;
+var HIGH_RES_WIDTH = 2560;
+var HIGH_RES_HEIGHT = 2560;
 var LUT = getLUT(24);			// Random in my case
+
+var JULIA_EXPONENT = 2;
+var JULIA_N_R = 2;
 
 run("Set Measurements...", "area mean standard modal min centroid center integrated display redirect=None decimal=9");
 
@@ -32,7 +36,8 @@ macro "high resolution image Action Tool - C000T4b12h" {
 macro "julia Tool - C000T4b12j" {
 	getCursorLoc(x, y, z, modifiers);
 	toScaled(x, y);
-	julia(x, y);
+	if (JULIA_EXPONENT==2) julia(x, y);
+	else juliaN(x,y);
 }
 
 macro "mandelbrot Action Tool Options" {
@@ -44,6 +49,24 @@ macro "mandelbrot Action Tool Options" {
 	maxIterations = Dialog.getNumber();
 	iWidth = Dialog.getNumber();
 	iHeight = Dialog.getNumber();
+}
+
+macro "high resolution image Action Tool Options" {
+	Dialog.create("High resolution image options");
+	Dialog.addNumber("image width: ", HIGH_RES_WIDTH);
+	Dialog.addNumber("image height: ", HIGH_RES_HEIGHT);
+	Dialog.show();
+	HIGH_RES_WIDTH = Dialog.getNumber();
+	HIGH_RES_HEIGHT = Dialog.getNumber();
+}
+
+macro "julia Tool Options" {
+	Dialog.create("Julia Options");
+	Dialog.addNumber("exponent (n): ", JULIA_EXPONENT);
+	Dialog.addNumber("escape radius (R): ", JULIA_N_R);
+	Dialog.show();
+	JULIA_EXPONENT = Dialog.getNumber();
+	JULIA_N_R = Dialog.getNumber();	
 }
 
 function getLUT(nr) {
@@ -62,25 +85,26 @@ function highRes() {
 
 function highResJulia() {
 	oldWidth = iWidth;
-	iWidth = iWidth * HIGH_RES_FACTOR;
+	iWidth = HIGH_RES_WIDTH;
 	oldHeight = iHeight;
-	iHeight = iHeight * HIGH_RES_FACTOR;
+	iHeight = HIGH_RES_HEIGHT;
 	info = getMetadata("Info");
 	parts = split(info, ",");
 	part1 = split(parts[0], "=");
 	part2 = split(parts[1], "=");
 	cx = parseFloat(part1[1]);
 	cy = parseFloat(part2[1]);
-	julia(cx, cy);
+	if (JULIA_EXPONENT==2) julia(cx, cy);
+	else juliaN(cx, cy);
 	iWidth = oldWidth;
 	iHeight = oldHeight;
 }
 
 function highResMandel() {
 	oldWidth = iWidth;
-	iWidth = iWidth * HIGH_RES_FACTOR;
+	iWidth = HIGH_RES_WIDTH;
 	oldHeight = iHeight;
-	iHeight = iHeight * HIGH_RES_FACTOR;
+	iHeight = HIGH_RES_HEIGHT;
 	run("Select All");
 	getSelectionBounds(x, y, width, height);
 	run("Select None");
@@ -184,6 +208,33 @@ function julia(cx, cy) {
 	setBatchMode("show");
 }
 
+function juliaN(cx, cy) {
+	RR = JULIA_N_R*JULIA_N_R;
+	rangeStart = -1*JULIA_N_R;
+	rangeEnd = JULIA_N_R;
+	delta = rangeEnd - rangeStart;
+	ixMax = iWidth-1;
+	iyMax = iHeight-1;	
+	xFactor = delta / ixMax;
+	yFactor = delta / iyMax;
+	print(cx, cy);
+	newImage("julia", "16-bit black", iWidth, iHeight, 1);
+	setMetadata("Info", "cx="+cx+", cy="+cy);
+	setBatchMode("hide");
+	for (x = 0; x < iWidth; x++) {
+		showProgress(x, iWidth-1);
+		x0 = x * xFactor + rangeStart;
+		for (y = 0; y < iHeight; y++) {
+			y0 = y * yFactor + rangeStart;
+			c = juliaNIterations(x0, y0, cx, cy, RR);
+			setPixel(x, y, c);
+		}
+	}
+	run(LUT);
+	run("Enhance Contrast", "saturated=0.35");
+	setBatchMode("show");
+}
+
 function juliaIterations(x, y, cx, cy, RR) {
 	zx = x;
 	zy = y;
@@ -194,6 +245,23 @@ function juliaIterations(x, y, cx, cy, RR) {
         zy = 2 * zx * zy  + cy; 
         zx = xtemp + cx;   
         iteration++;
+    }
+    if (iteration == maxIterations)
+        return 0;
+    else
+        return iteration;
+}
+
+function juliaNIterations(x, y, cx, cy, RR) {
+	zx = x;
+	zy = y;
+	iteration = 0;
+	 while (zx * zx + zy * zy < RR  &&  iteration < maxIterations) 
+    {
+        xtmp = pow((zx * zx + zy * zy), (JULIA_EXPONENT / 2)) * cos(JULIA_EXPONENT * atan2(zy, zx)) + cx;
+	    zy = pow((zx * zx + zy * zy),   (JULIA_EXPONENT / 2)) * sin(JULIA_EXPONENT * atan2(zy, zx)) + cy;
+	    zx = xtmp;
+	    iteration++;
     }
     if (iteration == maxIterations)
         return 0;
